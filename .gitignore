@@ -1,0 +1,17 @@
+./backend/.venv
+./backend/media_files
+
+# Ignore Python bytecode
+*.pyc
+*.pyo
+__pycache__/
+
+.env*
+
+files
+
+*.DS_Store
+
+*.mp4
+*.mp3
+*.webm
