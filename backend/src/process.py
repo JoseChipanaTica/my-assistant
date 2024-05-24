@@ -1,54 +1,54 @@
-import asyncio
-import time
-import uuid
+import base64
 
-from colorama import Fore, Style
-from src.llm.llm import llm_response
-from src.transcription.dg_transcription import DeepGramTranscription
-from src.tts.openai_tts import OpenAITTS
-from src.utils import creating_audio, creating_video, getting_frames
+from src.transcription.transcription import Transcription
+from src.tts.tts import TTS
 
 
-class VideoProcessing:
-    def __init__(self, video: bytes) -> None:
-        self.stt_client = DeepGramTranscription()
-        self.tts_client = OpenAITTS()
-        self.video = video
-        self.video_id = uuid.uuid4()
-        self.video_path = None
+class RealTimeProcess:
 
-    async def process_video(self):
-        start_time = time.time()
+    def __init__(self, stt_client: Transcription, llm_client, tts_client: TTS, messages):
+        self.stt_client = stt_client
+        self.tts_client = tts_client
+        self.llm_client = llm_client
+        self.messages = messages
+        self.ws_callback = None
 
-        self.video_path = creating_video(self.video, self.video_id)
+    def set_callback(self, callback):
+        self.ws_callback = callback
 
-        transcript, frames = await asyncio.gather(self.get_video_transcription(), self.get_video_frames())
+    def add_frame(self, frame_bytes):
+        base64_bytes = base64.b64encode(frame_bytes)
+        base64_string = base64_bytes.decode('utf-8')
 
+        self.messages.append({"role": "user", "content": [{"type": "image_url", "image_url": {
+            "url": f'data:image/jpg;base64,{base64_string}', "detail": "low"}}]})
+
+    async def add_audio(self, audio_bytes):
+        await self.stt_client.get_realtime_transcription(audio_bytes)
+
+    async def callback(self, transcript: str):
+        print("STT: ", transcript)
         if transcript:
-            response = llm_response(frames, transcript)
+            self.messages.append({"role": "user", "content": transcript})
+            text = await self.llm()
 
-            execution_time = time.time() - start_time
-            print(
-                f"{Fore.GREEN}Execution time: {execution_time:.2f} seconds{Style.RESET_ALL}")
+            if text:
+                print("LLM: ", text)
+                self.messages.append({"role": "assistant", "content": "text"})
+                speech = self.tts_client.text_to_speech(text)
+                await self.ws_callback(speech)
 
-            return self.tts_client.text_to_speech(response)
-        return None
+    async def start(self):
+        await self.stt_client.start()
+        self.stt_client.set_callback(self.callback)
 
-    async def get_video_transcription(self):
-        try:
-            audio_bytes = await creating_audio(self.video_path, self.video_id)
-            print("Creating The Transcription")
-            transcription = self.stt_client.get_transcription(audio_bytes)
-            return transcription
-        except Exception as e:
-            print(f'Error Extracting the audio: {e}')
-            return None
+    async def llm(self):
+        response = self.llm_client.chat.completions.create(
+            model="gpt-4o",
+            messages=self.messages[-20:],
+            temperature=0,
+        )
 
-    async def get_video_frames(self):
-        try:
-            video_path = await creating_video(self.video, self.video_id)
-            frames = getting_frames(video_path)
-            return frames
-        except Exception as e:
-            print(f'Error Extracting the video: {e}')
-            return None
+        text = response.choices[0].message.content
+
+        return text

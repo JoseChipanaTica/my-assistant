@@ -1,74 +1,8 @@
-import base64
-import io
-import os
-import subprocess
-import tempfile
-import time
-
-import cv2
-import ffmpeg
-from colorama import Fore, Style  # Import color constants
-from moviepy.editor import VideoFileClip
-
-MEDIA_DIR = "files"
-
-
-def get_bytes_from_file(file_path):
-    with open(file_path, "rb") as file:
-        buffer_data = file.read()
-        file.close()
-        return buffer_data
-
-
-async def creating_video(video: bytes, video_uuid: str):
-    start_time = time.time()
-
-    video_file_path = os.path.join(MEDIA_DIR, f"{video_uuid}.webm")
-
-    with open(video_file_path, "wb") as video_file:
-        video_file.write(video)
-        video_file.close()
-
-    return video_file_path
-
-    # Convert webm to mp4 using ffmpeg
-    output_file_path = os.path.join(MEDIA_DIR, f"{video_uuid}.mp4")
-    ffmpeg_command = ["ffmpeg", "-i", video_file_path, output_file_path]
-
-    try:
-        subprocess.run(ffmpeg_command, check=True)
-
-        execution_time = time.time() - start_time
-        print(
-            f"{Fore.GREEN}Execution time: {execution_time:.2f} seconds{Style.RESET_ALL}")
-        return output_file_path
-    except subprocess.CalledProcessError as e:
-        #  print("Error converting video:", e)
-        return ""  # Return empty string i
-
-
-async def creating_audio(video_path: str, video_uuid: str):
-
-    audio_path = os.path.join(MEDIA_DIR, f"{video_uuid}.mp3")
-    clip = VideoFileClip(video_path)
-    clip.audio.write_audiofile(audio_path, bitrate="32k")
-    clip.audio.close()
-    clip.close()
-
-    return get_bytes_from_file(audio_path)
-
-
-def getting_frames(video_path: str):
-    video = cv2.VideoCapture(video_path)
-
-    base64Frames = []
-    while video.isOpened():
-        success, frame = video.read()
-        if not success:
-            break
-        _, buffer = cv2.imencode(".jpg", frame)
-        base64Frames.append(base64.b64encode(buffer).decode("utf-8"))
-
-    video.release()
-
-    return base64Frames[0::60]
+SYSTEM_PROMPT = """
+                Your primary purpose is to assist users by generating human-like text based on the input you receive. 
+                Offer accurate and up-to-date information on a wide range of topics, respond to queries clearly and concisely, and help with tasks such as writing, summarizing, translating, generating ideas, or creating content.
+                Engage in meaningful and coherent conversations, maintaining context and providing relevant responses.
+                Adhere to ethical guidelines, ensuring responses are respectful, non-discriminatory, and free of harmful content, while respecting user privacy and confidentiality. 
+                Provide citations or references when applicable to ensure credibility and allow users to verify information. Strive to stay neutral and unbiased, presenting information factually and impartially. 
+                Always aim to be helpful, informative, and respectful in all interactions.
+                """

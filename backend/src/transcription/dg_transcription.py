@@ -8,13 +8,13 @@ from .transcription import Transcription
 
 class DeepGramTranscription(Transcription):
 
-    def __init__(self, callback) -> None:
+    def __init__(self):
 
         config = DeepgramClientOptions(options={"keepalive": "true"})
         self.client = DeepgramClient(config=config)
         self.dg_connection = self.client.listen.asynclive.v("1")
-
-        self.callback = callback
+        self.collector: List[str] = []
+        self.callback = None
 
         async def on_message(_self, result, **kwargs):
             sentence: str = result.channel.alternatives[0].transcript
@@ -24,6 +24,7 @@ class DeepGramTranscription(Transcription):
                 if len(sentence) == 0:
                     return
 
+                print("To response", self.collector)
                 await self.callback(' '.join(self.collector))
                 self.collector = []
 
@@ -39,7 +40,8 @@ class DeepGramTranscription(Transcription):
         self.dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
         self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-        self.collector: List[str] = []
+    def set_callback(self, callback):
+        self.callback = callback
 
     async def start(self):
         options = LiveOptions(
@@ -48,22 +50,6 @@ class DeepGramTranscription(Transcription):
             language='es'
         )
         await self.dg_connection.start(options)
-        try:
-
-            payload: FileSource = {
-                "buffer": audio_bytes,
-            }
-
-            response = self.client.listen.prerecorded.v(
-                "1").transcribe_file(payload, self.options)
-
-            transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
-            print("DEEPGRAM_TRANSCRIPT", transcript)
-            return transcript
-
-        except Exception as e:
-            print(f"DEEPGRAM Transcription Exception: {e}")
-            return ''
 
     async def get_realtime_transcription(self, audio_bytes):
         await self.dg_connection.send(audio_bytes)
