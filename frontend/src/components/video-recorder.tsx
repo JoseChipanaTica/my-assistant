@@ -1,27 +1,25 @@
 'use client'
 
 import { MutableRefObject, useEffect, useRef, useState } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 
 export const VideoRecorder: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false)
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
-  const mediaRecorderRef: MutableRefObject<MediaRecorder | null> = useRef(null)
-  const [socket, setSocket] = useState<WebSocket | null>(null)
   const videoRef: MutableRefObject<HTMLVideoElement | null> = useRef(null)
-  const chunks: MutableRefObject<Blob[]> = useRef([])
-  const silenceTimeout: MutableRefObject<NodeJS.Timeout | null> = useRef(null)
+  const [audioSocket, setAudioSocket] = useState<WebSocket | null>(null)
+  const [videoSocket, setVideoSocket] = useState<WebSocket | null>(null)
   const audioContextRef: MutableRefObject<AudioContext | null> = useRef(null)
-  const analyserRef: MutableRefObject<AnalyserNode | null> = useRef(null)
-  const dataArrayRef: MutableRefObject<Uint8Array | null> = useRef(null)
-  const [shouldRestart, setShouldRestart] = useState<boolean>(true) // New state variable
-  const [serverResponse, setServerResponse] = useState<string>('')
+  const sessionId = useRef<string>(uuidv4())
+  const videoCanvasRef: MutableRefObject<HTMLCanvasElement | null> = useRef(null)
 
   useEffect(() => {
-    // Get access to the camera and microphone
     const getMedia = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+
         setMediaStream(stream)
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream
         }
@@ -30,151 +28,150 @@ export const VideoRecorder: React.FC = () => {
       }
     }
 
-    // Initialize WebSocket connection
-    const initWebSocket = () => {
-      const ws = new WebSocket('ws://127.0.0.1:8000/ws')
+    const initAudioWebSocket = () => {
+      const ws = new WebSocket('ws://127.0.0.1:8000/ws/audio')
+      ws.onopen = () => {
+        console.log('WebSocket connection established')
+      }
+
+      ws.onmessage = async event => {
+        console.log(event)
+        const arrayBuffer = await event.data.arrayBuffer()
+        console.log(arrayBuffer)
+        playAudio(arrayBuffer)
+      }
+
+      ws.onerror = error => {
+        console.error('WebSocket error:', error)
+      }
+
+      ws.onclose = () => {
+        console.log('WebSocket connection closed')
+      }
+      setAudioSocket(ws)
+    }
+
+    const initVideoWebSocket = () => {
+      const ws = new WebSocket('ws://127.0.0.1:8000/ws/video')
       ws.onopen = () => {
         console.log('WebSocket connection established')
       }
       ws.onerror = error => {
         console.error('WebSocket error:', error)
       }
-      ws.onmessage = async event => {
-        if (typeof event.data === 'string') {
-          console.log('Message received from server:', event.data)
-          setServerResponse(event.data) // Set server response to state
-        } else {
-          console.log('Audio bytes received from server')
-          const arrayBuffer = await event.data.arrayBuffer()
-          playAudio(arrayBuffer)
-        }
-      }
       ws.onclose = () => {
         console.log('WebSocket connection closed')
       }
-      setSocket(ws)
+      setVideoSocket(ws)
     }
 
     getMedia()
-    initWebSocket()
+    initAudioWebSocket()
+    initVideoWebSocket()
 
     // Cleanup on component unmount
     return () => {
-      if (socket) {
-        socket.close()
+      if (audioSocket) {
+        audioSocket.close()
       }
+
+      if (videoSocket) {
+        videoSocket.close()
+      }
+
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop())
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
       }
     }
   }, [])
 
   const startRecording = (stream: MediaStream) => {
-    if (!stream) return
+    const audioStream = new MediaStream(stream.getAudioTracks())
 
-    const recorder = new MediaRecorder(stream)
-    mediaRecorderRef.current = recorder
-
+    const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' })
     recorder.ondataavailable = (event: BlobEvent) => {
       if (event.data.size > 0) {
-        chunks.current.push(event.data)
+        if (audioSocket && audioSocket.readyState === WebSocket.OPEN) {
+          audioSocket.send(event.data)
+        }
       }
     }
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks.current, { type: 'video/webm' })
-      chunks.current = []
-      console.log('Sending data to server:', blob)
-      sendToServer(blob)
+    recorder.onstop = () => {}
 
-      if (shouldRestart) {
-        startRecording(stream) // Automatically restart recording
-      }
-    }
-
-    recorder.start(1000) // Collect data in 1-second intervals
-
-    // Set up Web Audio API to monitor audio levels
-    const audioContext = new AudioContext()
-    audioContextRef.current = audioContext
-    const analyser = audioContext.createAnalyser()
-    analyserRef.current = analyser
-    const source = audioContext.createMediaStreamSource(stream)
-    source.connect(analyser)
-
-    analyser.fftSize = 256
-    const bufferLength = analyser.frequencyBinCount
-    const dataArray = new Uint8Array(bufferLength)
-    dataArrayRef.current = dataArray
-
-    monitorAudioLevel()
+    recorder.start(1000 * 2)
     setIsRecording(true)
   }
 
-  const monitorAudioLevel = () => {
-    if (!analyserRef.current || !dataArrayRef.current) return
+  const startVideoCapture = (stream: MediaStream) => {
+    if (!videoCanvasRef.current) {
+      const canvas = document.createElement('canvas')
+      videoCanvasRef.current = canvas
+    }
 
-    analyserRef.current.getByteFrequencyData(dataArrayRef.current)
-    // console.log('DataArrayRef Length: ', dataArrayRef.current.length)
-    const sum = dataArrayRef.current.reduce((a, b) => a + b, 0)
-    // console.log('DataArrayRef Sum: ', sum)
-
-    const average = sum / dataArrayRef.current.length
-
-    if (average > 1 && average < 10) {
-      // Adjust this threshold as needed
-      if (!silenceTimeout.current) {
-        silenceTimeout.current = setTimeout(() => {
-          console.log('average', average)
-          handleSilenceDetected()
-          silenceTimeout.current = null
-        }, 2000) // 2 seconds of silence
+    const captureFrame = () => {
+      if (videoRef.current && videoCanvasRef.current) {
+        const context = videoCanvasRef.current.getContext('2d')
+        if (context) {
+          videoCanvasRef.current.width = videoRef.current.videoWidth
+          videoCanvasRef.current.height = videoRef.current.videoHeight
+          context.drawImage(videoRef.current, 0, 0, videoCanvasRef.current.width, videoCanvasRef.current.height)
+          videoCanvasRef.current.toBlob(blob => {
+            if (blob) {
+              if (videoSocket && videoSocket.readyState === WebSocket.OPEN) {
+                videoSocket.send(blob)
+              }
+            }
+          }, 'image/jpeg')
+        }
       }
-    } else {
-      if (silenceTimeout.current) {
-        clearTimeout(silenceTimeout.current)
-        silenceTimeout.current = null
+      setTimeout(captureFrame, 1000 * 2) // Capture one frame per second
+    }
+
+    captureFrame()
+    setIsRecording(true)
+  }
+
+  const startAudioCapture = (stream: MediaStream) => {
+    const audioContext = new AudioContext()
+    const source = audioContext.createMediaStreamSource(stream)
+    const scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+
+    scriptProcessor.onaudioprocess = event => {
+      const inputBuffer = event.inputBuffer.getChannelData(0)
+      const inputData = new Float32Array(inputBuffer.length)
+      inputData.set(inputBuffer)
+
+      if (audioSocket && audioSocket.readyState === WebSocket.OPEN) {
+        console.log(inputBuffer.buffer)
+        audioSocket.send(inputBuffer.buffer)
       }
     }
 
-    requestAnimationFrame(monitorAudioLevel)
-  }
-
-  const handleSilenceDetected = () => {
-    console.log('Silence detected, user finished talking.')
-    stopRecording()
-  }
-
-  const sendToServer = (data: Blob) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(data)
-    }
+    source.connect(scriptProcessor)
+    scriptProcessor.connect(audioContext.destination)
   }
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop()
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop())
     }
     setIsRecording(false)
   }
 
-  const dropRecording = () => {
-    setShouldRestart(false) // Prevent automatic restart
-    stopRecording()
-  }
+  const playAudio = async (audioBytes: ArrayBuffer) => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+    }
 
-  const playAudio = async (arrayBuffer: ArrayBuffer) => {
-    if (!audioContextRef.current) return
+    const audioContext = audioContextRef.current
 
     try {
-      const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer)
-      const source = audioContextRef.current.createBufferSource()
+      const audioBuffer = await audioContext.decodeAudioData(audioBytes)
+      const source = audioContext.createBufferSource()
       source.buffer = audioBuffer
-      source.connect(audioContextRef.current.destination)
-      source.start()
+      source.connect(audioContext.destination)
+      source.start(0)
     } catch (error) {
       console.error('Error decoding audio data:', error)
     }
@@ -185,14 +182,18 @@ export const VideoRecorder: React.FC = () => {
       <video ref={videoRef} autoPlay muted style={{ width: '100%' }} />
       <div>
         {isRecording ? (
-          <button onClick={dropRecording}>Stop Recording</button>
+          <button onClick={stopRecording}>Stop Recording</button>
         ) : (
-          <button onClick={() => mediaStream && startRecording(mediaStream)}>Start Recording</button>
+          <button
+            onClick={() => {
+              if (mediaStream) {
+                startRecording(mediaStream), startVideoCapture(mediaStream)
+              }
+            }}
+          >
+            Start Recording
+          </button>
         )}
-      </div>
-
-      <div>
-        <p>Server Response: {serverResponse}</p>
       </div>
     </div>
   )

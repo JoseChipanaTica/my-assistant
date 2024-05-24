@@ -1,28 +1,57 @@
-from deepgram import DeepgramClient, FileSource, PrerecordedOptions
-from src.utils import get_bytes_from_file
+from typing import List
+
+from deepgram import (DeepgramClient, DeepgramClientOptions, FileSource,
+                      LiveOptions, LiveTranscriptionEvents)
 
 from .transcription import Transcription
 
 
 class DeepGramTranscription(Transcription):
 
-    def __init__(self) -> None:
+    def __init__(self, callback) -> None:
 
-        self.client = DeepgramClient()
-        self.options = PrerecordedOptions(
+        config = DeepgramClientOptions(options={"keepalive": "true"})
+        self.client = DeepgramClient(config=config)
+        self.dg_connection = self.client.listen.asynclive.v("1")
+
+        self.callback = callback
+
+        async def on_message(_self, result, **kwargs):
+            sentence: str = result.channel.alternatives[0].transcript
+            self.collector.append(sentence.strip())
+
+            if result.speech_final:
+                if len(sentence) == 0:
+                    return
+
+                await self.callback(' '.join(self.collector))
+                self.collector = []
+
+        async def on_metadata(_self, metadata, **kwargs):
+            print("")
+            # print(f"\n\n{metadata}\n\n")
+
+        async def on_error(_self, error, **kwargs):
+            print("Check Error")
+            #  print(f"\n\n{error}\n\n")
+
+        self.dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        self.dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+        self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+        self.collector: List[str] = []
+
+    async def start(self):
+        options = LiveOptions(
             model="nova-2",
             smart_format=True,
             language='es'
         )
-
-    def get_transcription_from_file(self, file_path) -> str:
-
+        await self.dg_connection.start(options)
         try:
 
-            buffer_data = get_bytes_from_file(file_path)
-
             payload: FileSource = {
-                "buffer": buffer_data,
+                "buffer": audio_bytes,
             }
 
             response = self.client.listen.prerecorded.v(
@@ -35,3 +64,6 @@ class DeepGramTranscription(Transcription):
         except Exception as e:
             print(f"DEEPGRAM Transcription Exception: {e}")
             return ''
+
+    async def get_realtime_transcription(self, audio_bytes):
+        await self.dg_connection.send(audio_bytes)

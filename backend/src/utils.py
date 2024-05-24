@@ -1,9 +1,12 @@
 import base64
+import io
 import os
 import subprocess
+import tempfile
 import time
 
 import cv2
+import ffmpeg
 from colorama import Fore, Style  # Import color constants
 from moviepy.editor import VideoFileClip
 
@@ -13,10 +16,11 @@ MEDIA_DIR = "files"
 def get_bytes_from_file(file_path):
     with open(file_path, "rb") as file:
         buffer_data = file.read()
+        file.close()
         return buffer_data
 
 
-def creating_video(video: bytes, video_uuid: str):
+async def creating_video(video: bytes, video_uuid: str):
     start_time = time.time()
 
     video_file_path = os.path.join(MEDIA_DIR, f"{video_uuid}.webm")
@@ -24,6 +28,8 @@ def creating_video(video: bytes, video_uuid: str):
     with open(video_file_path, "wb") as video_file:
         video_file.write(video)
         video_file.close()
+
+    return video_file_path
 
     # Convert webm to mp4 using ffmpeg
     output_file_path = os.path.join(MEDIA_DIR, f"{video_uuid}.mp4")
@@ -37,21 +43,19 @@ def creating_video(video: bytes, video_uuid: str):
             f"{Fore.GREEN}Execution time: {execution_time:.2f} seconds{Style.RESET_ALL}")
         return output_file_path
     except subprocess.CalledProcessError as e:
-        execution_time = time.time() - start_time
-        print(
-            f"{Fore.RED}Execution time (failed): {execution_time:.2f} seconds{Style.RESET_ALL}")
-        #  print("Error converting video:", e)
+        #  print("Error converting video:", e)
         return ""  # Return empty string i
 
 
-def creating_audio(video_path: str, video_uuid: str):
+async def creating_audio(video_path: str, video_uuid: str):
+
     audio_path = os.path.join(MEDIA_DIR, f"{video_uuid}.mp3")
     clip = VideoFileClip(video_path)
     clip.audio.write_audiofile(audio_path, bitrate="32k")
     clip.audio.close()
     clip.close()
 
-    return audio_path
+    return get_bytes_from_file(audio_path)
 
 
 def getting_frames(video_path: str):
