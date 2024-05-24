@@ -1,7 +1,7 @@
 from typing import List
 
-from deepgram import (DeepgramClient, DeepgramClientOptions, FileSource,
-                      LiveOptions, LiveTranscriptionEvents)
+from deepgram import (DeepgramClient, DeepgramClientOptions, LiveOptions,
+                      LiveTranscriptionEvents)
 
 from .transcription import Transcription
 
