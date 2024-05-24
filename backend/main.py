@@ -1,4 +1,3 @@
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket
 from openai import OpenAI
@@ -16,6 +15,11 @@ websocket_clients = []
 
 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
+stt_client = DeepGramTranscription()
+llm_client = OpenAI()
+tts_client = OpenAITTS()
+process = RealTimeProcess(stt_client, llm_client, tts_client, messages)
+
 
 @app.get("/")
 def read_root():
@@ -24,11 +28,6 @@ def read_root():
 
 @app.websocket("/ws/audio")
 async def ws_audio(websocket: WebSocket):
-    stt_client = DeepGramTranscription()
-    llm_client = OpenAI()
-    tts_client = OpenAITTS()
-
-    process = RealTimeProcess(stt_client, llm_client, tts_client, messages)
 
     await websocket.accept()
     await process.start()
@@ -56,7 +55,7 @@ async def ws_video(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_bytes()
-            # await process.add_frame(data)
+            await process.add_frame(data)
 
     except ConnectionClosedError:
         websocket_clients.remove(websocket)

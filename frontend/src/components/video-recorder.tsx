@@ -1,7 +1,6 @@
 'use client'
 
 import { MutableRefObject, useEffect, useRef, useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
 
 export const VideoRecorder: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false)
@@ -10,7 +9,6 @@ export const VideoRecorder: React.FC = () => {
   const [audioSocket, setAudioSocket] = useState<WebSocket | null>(null)
   const [videoSocket, setVideoSocket] = useState<WebSocket | null>(null)
   const audioContextRef: MutableRefObject<AudioContext | null> = useRef(null)
-  const sessionId = useRef<string>(uuidv4())
   const videoCanvasRef: MutableRefObject<HTMLCanvasElement | null> = useRef(null)
 
   useEffect(() => {
@@ -35,9 +33,7 @@ export const VideoRecorder: React.FC = () => {
       }
 
       ws.onmessage = async event => {
-        console.log(event)
         const arrayBuffer = await event.data.arrayBuffer()
-        console.log(arrayBuffer)
         playAudio(arrayBuffer)
       }
 
@@ -69,7 +65,6 @@ export const VideoRecorder: React.FC = () => {
     initAudioWebSocket()
     initVideoWebSocket()
 
-    // Cleanup on component unmount
     return () => {
       if (audioSocket) {
         audioSocket.close()
@@ -125,31 +120,11 @@ export const VideoRecorder: React.FC = () => {
           }, 'image/jpeg')
         }
       }
-      setTimeout(captureFrame, 1000 * 2) // Capture one frame per second
+      setTimeout(captureFrame, 1000 * 2)
     }
 
     captureFrame()
     setIsRecording(true)
-  }
-
-  const startAudioCapture = (stream: MediaStream) => {
-    const audioContext = new AudioContext()
-    const source = audioContext.createMediaStreamSource(stream)
-    const scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
-
-    scriptProcessor.onaudioprocess = event => {
-      const inputBuffer = event.inputBuffer.getChannelData(0)
-      const inputData = new Float32Array(inputBuffer.length)
-      inputData.set(inputBuffer)
-
-      if (audioSocket && audioSocket.readyState === WebSocket.OPEN) {
-        console.log(inputBuffer.buffer)
-        audioSocket.send(inputBuffer.buffer)
-      }
-    }
-
-    source.connect(scriptProcessor)
-    scriptProcessor.connect(audioContext.destination)
   }
 
   const stopRecording = () => {

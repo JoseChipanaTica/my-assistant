@@ -23,9 +23,7 @@ class DeepGramTranscription(Transcription):
             if result.speech_final:
                 if len(sentence) == 0:
                     return
-
-                print("To response", self.collector)
-                await self.callback(' '.join(self.collector))
+                await self.callback(' '.join(self.collector).strip())
                 self.collector = []
 
         async def on_metadata(_self, metadata, **kwargs):

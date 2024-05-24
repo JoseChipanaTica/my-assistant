@@ -27,13 +27,11 @@ class RealTimeProcess:
         await self.stt_client.get_realtime_transcription(audio_bytes)
 
     async def callback(self, transcript: str):
-        print("STT: ", transcript)
         if transcript:
             self.messages.append({"role": "user", "content": transcript})
             text = await self.llm()
 
             if text:
-                print("LLM: ", text)
                 self.messages.append({"role": "assistant", "content": "text"})
                 speech = self.tts_client.text_to_speech(text)
                 await self.ws_callback(speech)
