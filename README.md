@@ -67,9 +67,8 @@ My-Assistant is a virtual assistant designed to provide real-time information to
     ```
 
 2. Interact with My-Assistant opening the browser:
-    - Use a microphone to speak to the assistant.
-    - Upload images for processing.
-    - Receive real-time responses to your queries.
+    - Enable or give permission to microphone & camera
+    - Click "start recording"
 
 ## Acknowledgements
 
