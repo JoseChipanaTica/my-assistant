@@ -45,7 +45,7 @@ class DeepGramTranscription(Transcription):
         options = LiveOptions(
             model="nova-2",
             smart_format=True,
-            language='es'
+            language='en'
         )
         await self.dg_connection.start(options)
 

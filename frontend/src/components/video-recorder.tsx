@@ -94,7 +94,7 @@ export const VideoRecorder: React.FC = () => {
 
     recorder.onstop = () => {}
 
-    recorder.start(1000 * 2)
+    recorder.start(1000 * 1)
     setIsRecording(true)
   }
 
@@ -153,13 +153,18 @@ export const VideoRecorder: React.FC = () => {
   }
 
   return (
-    <div>
-      <video ref={videoRef} autoPlay muted style={{ width: '100%' }} />
-      <div>
+    <div className="h-screen w-screen flex space-x-4 justify-center items-center">
+      <div className="w-full h-full basis-3/4 p-10">
+        <video ref={videoRef} autoPlay muted style={{ width: '100%', height: '100%' }} />
+      </div>
+      <div className="w-full basis-1/4 flex justify-center items-center">
         {isRecording ? (
-          <button onClick={stopRecording}>Stop Recording</button>
+          <button className="bg-blue-600 rounded-3xl p-4" onClick={stopRecording}>
+            Stop Recording
+          </button>
         ) : (
           <button
+            className="bg-blue-600 rounded-3xl p-4"
             onClick={() => {
               if (mediaStream) {
                 startRecording(mediaStream), startVideoCapture(mediaStream)

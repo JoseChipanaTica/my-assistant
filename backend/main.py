@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket
-from openai import OpenAI
+from openai import AsyncOpenAI
 from src.process import RealTimeProcess
 from src.transcription.dg_transcription import DeepGramTranscription
 from src.tts.openai_tts import OpenAITTS
@@ -16,9 +16,9 @@ websocket_clients = []
 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 stt_client = DeepGramTranscription()
-llm_client = OpenAI()
+llm_client = AsyncOpenAI()
 tts_client = OpenAITTS()
-process = RealTimeProcess(stt_client, llm_client, tts_client, messages)
+process = RealTimeProcess(stt_client, llm_client, tts_client)
 
 
 @app.get("/")
@@ -31,6 +31,8 @@ async def ws_audio(websocket: WebSocket):
 
     await websocket.accept()
     await process.start()
+
+    process.messages = messages
 
     websocket_clients.append(websocket)
 
