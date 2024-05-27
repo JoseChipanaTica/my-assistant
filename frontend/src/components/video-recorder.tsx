@@ -14,7 +14,7 @@ export const VideoRecorder: React.FC = () => {
   useEffect(() => {
     const getMedia = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
 
         setMediaStream(stream)
 
@@ -27,7 +27,7 @@ export const VideoRecorder: React.FC = () => {
     }
 
     const initAudioWebSocket = () => {
-      const ws = new WebSocket('ws://127.0.0.1:8000/ws/audio')
+      const ws = new WebSocket(`${process.env.WEBSOCKET_SERVICE}/ws/audio`)
       ws.onopen = () => {
         console.log('WebSocket connection established')
       }
@@ -48,7 +48,7 @@ export const VideoRecorder: React.FC = () => {
     }
 
     const initVideoWebSocket = () => {
-      const ws = new WebSocket('ws://127.0.0.1:8000/ws/video')
+      const ws = new WebSocket(`${process.env.WEBSOCKET_SERVICE}/ws/video`)
       ws.onopen = () => {
         console.log('WebSocket connection established')
       }
@@ -153,27 +153,27 @@ export const VideoRecorder: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex space-x-4 justify-center items-center">
-      <div className="w-full h-full basis-3/4 p-10">
-        <video ref={videoRef} autoPlay muted style={{ width: '100%', height: '100%' }} />
-      </div>
-      <div className="w-full basis-1/4 flex justify-center items-center">
-        {isRecording ? (
-          <button className="bg-blue-600 rounded-3xl p-4" onClick={stopRecording}>
-            Stop Recording
-          </button>
-        ) : (
-          <button
-            className="bg-blue-600 rounded-3xl p-4"
-            onClick={() => {
-              if (mediaStream) {
-                startRecording(mediaStream), startVideoCapture(mediaStream)
-              }
-            }}
-          >
-            Start Recording
-          </button>
-        )}
+    <div className="h-screen w-screen">
+      <div className="h-full flex flex-col justify-center items-center">
+        <video className="w-full h-full" ref={videoRef} autoPlay muted playsInline style={{ width: '50%' }} />
+        <div className="flex p-2">
+          {isRecording ? (
+            <button className="bg-blue-600 rounded-3xl p-4" onClick={stopRecording}>
+              Stop Recording
+            </button>
+          ) : (
+            <button
+              className="bg-blue-600 rounded-3xl p-4"
+              onClick={() => {
+                if (mediaStream) {
+                  startRecording(mediaStream), startVideoCapture(mediaStream)
+                }
+              }}
+            >
+              Start Recording
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
