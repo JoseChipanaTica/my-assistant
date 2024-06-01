@@ -47,7 +47,7 @@ class RealTimeProcess:
     async def llm(self):
         response = await self.llm_client.chat.completions.create(
             model="gpt-4o",
-            messages=self.messages[-20:],
+            messages=self.messages[-5:],
             temperature=0,
         )
 

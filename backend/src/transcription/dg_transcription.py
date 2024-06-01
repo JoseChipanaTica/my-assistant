@@ -41,6 +41,9 @@ class DeepGramTranscription(Transcription):
     def set_callback(self, callback):
         self.callback = callback
 
+    def get_transcription(self, audio_bytes):
+        pass
+
     async def start(self):
         options = LiveOptions(
             model="nova-2",

@@ -3,11 +3,15 @@ from abc import ABC, abstractmethod
 
 class Transcription(ABC):
     @abstractmethod
-    def set_callback(self):
+    def set_callback(self, callback):
         pass
 
     @abstractmethod
     async def start(self):
+        pass
+
+    @abstractmethod
+    def get_transcription(self, audio_bytes):
         pass
 
     @abstractmethod

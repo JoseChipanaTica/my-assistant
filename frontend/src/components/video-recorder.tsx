@@ -10,84 +10,20 @@ export const VideoRecorder: React.FC = () => {
   const [videoSocket, setVideoSocket] = useState<WebSocket | null>(null)
   const audioContextRef: MutableRefObject<AudioContext | null> = useRef(null)
   const videoCanvasRef: MutableRefObject<HTMLCanvasElement | null> = useRef(null)
+  const [audioQueue, setAudioQueue] = useState<any[]>([])
 
-  useEffect(() => {
-    const getMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
-
-        setMediaStream(stream)
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-      } catch (err) {
-        console.error('Error accessing media devices.', err)
-      }
-    }
-
-    const initAudioWebSocket = () => {
-      const ws = new WebSocket(`${process.env.WEBSOCKET_SERVICE}/ws/audio`)
-      ws.onopen = () => {
-        console.log('WebSocket connection established')
-      }
-
-      ws.onmessage = async event => {
-        const arrayBuffer = await event.data.arrayBuffer()
-        playAudio(arrayBuffer)
-      }
-
-      ws.onerror = error => {
-        console.error('WebSocket error:', error)
-      }
-
-      ws.onclose = () => {
-        console.log('WebSocket connection closed')
-      }
-      setAudioSocket(ws)
-    }
-
-    const initVideoWebSocket = () => {
-      const ws = new WebSocket(`${process.env.WEBSOCKET_SERVICE}/ws/video`)
-      ws.onopen = () => {
-        console.log('WebSocket connection established')
-      }
-      ws.onerror = error => {
-        console.error('WebSocket error:', error)
-      }
-      ws.onclose = () => {
-        console.log('WebSocket connection closed')
-      }
-      setVideoSocket(ws)
-    }
-
-    getMedia()
-    initAudioWebSocket()
-    initVideoWebSocket()
-
-    return () => {
-      if (audioSocket) {
-        audioSocket.close()
-      }
-
-      if (videoSocket) {
-        videoSocket.close()
-      }
-
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop())
-      }
-    }
-  }, [])
+  const enqueueAudio = (audioBytes: any) => {
+    setAudioQueue(prevQueue => [...prevQueue, audioBytes])
+  }
 
   const startRecording = (stream: MediaStream) => {
     const audioStream = new MediaStream(stream.getAudioTracks())
-
     const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' })
     recorder.ondataavailable = (event: BlobEvent) => {
       if (event.data.size > 0) {
         if (audioSocket && audioSocket.readyState === WebSocket.OPEN) {
-          audioSocket.send(event.data)
+          const audioBlob = new Blob([event.data], { type: 'audio/wav' })
+          audioSocket.send(audioBlob)
         }
       }
     }
@@ -98,7 +34,7 @@ export const VideoRecorder: React.FC = () => {
     setIsRecording(true)
   }
 
-  const startVideoCapture = (stream: MediaStream) => {
+  const startVideoCapture = () => {
     if (!videoCanvasRef.current) {
       const canvas = document.createElement('canvas')
       videoCanvasRef.current = canvas
@@ -134,9 +70,14 @@ export const VideoRecorder: React.FC = () => {
     setIsRecording(false)
   }
 
-  const playAudio = async (audioBytes: ArrayBuffer) => {
+  const playNextAudio = async () => {
+    if (audioQueue.length === 0) return
+
+    const audioBytes = audioQueue[0]
+
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      // @ts-ignore
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
     }
 
     const audioContext = audioContextRef.current
@@ -147,10 +88,90 @@ export const VideoRecorder: React.FC = () => {
       source.buffer = audioBuffer
       source.connect(audioContext.destination)
       source.start(0)
+
+      source.onended = () => {
+        setAudioQueue(prevQueue => prevQueue.slice(1))
+      }
     } catch (error) {
       console.error('Error decoding audio data:', error)
+      setAudioQueue(prevQueue => prevQueue.slice(1))
     }
   }
+
+  useEffect(() => {
+    if (audioQueue.length > 0) {
+      playNextAudio()
+    }
+  }, [audioQueue])
+
+  useEffect(() => {
+    const getMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
+
+        setMediaStream(stream)
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+      } catch (err) {
+        console.error('Error accessing media devices.', err)
+      }
+    }
+
+    const initAudioWebSocket = () => {
+      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVICE}/ws/audio`)
+      ws.onopen = () => {
+        console.log('WebSocket connection established')
+      }
+
+      ws.onmessage = async event => {
+        const arrayBuffer = await event.data.arrayBuffer()
+        enqueueAudio(arrayBuffer)
+      }
+
+      ws.onerror = error => {
+        console.error('WebSocket error:', error)
+      }
+
+      ws.onclose = () => {
+        console.log('WebSocket connection closed')
+      }
+      setAudioSocket(ws)
+    }
+
+    const initVideoWebSocket = () => {
+      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVICE}/ws/video`)
+      ws.onopen = () => {
+        console.log('WebSocket connection established')
+      }
+      ws.onerror = error => {
+        console.error('WebSocket error:', error)
+      }
+      ws.onclose = () => {
+        console.log('WebSocket connection closed')
+      }
+      setVideoSocket(ws)
+    }
+
+    getMedia()
+    initAudioWebSocket()
+    // initVideoWebSocket()
+
+    return () => {
+      if (audioSocket) {
+        audioSocket.close()
+      }
+
+      if (videoSocket) {
+        videoSocket.close()
+      }
+
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [])
 
   return (
     <div className="h-screen w-screen">
@@ -166,7 +187,7 @@ export const VideoRecorder: React.FC = () => {
               className="bg-blue-600 rounded-3xl p-4"
               onClick={() => {
                 if (mediaStream) {
-                  startRecording(mediaStream), startVideoCapture(mediaStream)
+                  startRecording(mediaStream), startVideoCapture()
                 }
               }}
             >

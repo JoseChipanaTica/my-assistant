@@ -4,6 +4,9 @@ dependencies:
   '@deepgram/sdk':
     specifier: ^3.3.3
     version: 3.3.3
+  '@types/recordrtc':
+    specifier: ^5.6.14
+    version: 5.6.14
   next:
     specifier: 14.2.3
     version: 14.2.3(react-dom@18.0.0)(react@18.0.0)
@@ -13,6 +16,9 @@ dependencies:
   react-dom:
     specifier: ^18
     version: 18.0.0(react@18.0.0)
+  recordrtc:
+    specifier: ^5.6.2
+    version: 5.6.2
   uuid:
     specifier: ^9.0.1
     version: 9.0.1
@@ -314,6 +320,10 @@ packages:
       '@types/scheduler': 0.23.0
       csstype: 3.1.3
     dev: true
+
+  /@types/recordrtc@5.6.14:
+    resolution: {integrity: sha512-Reiy1sl11xP0r6w8DW3iQjc1BgXFyNC7aDuutysIjpFoqyftbQps9xPA2FoBkfVXpJM61betgYPNt+v65zvMhA==}
+    dev: false
 
   /@types/scheduler@0.23.0:
     resolution: {integrity: sha512-YIoDCTH3Af6XM5VuwGG/QL/CJqga1Zm3NkU3HZ4ZHK2fRMPYP1VczsTUqtsf43PH/iJNVlPHAo2oWX7BSdB2Hw==}
@@ -2428,6 +2438,10 @@ packages:
     dependencies:
       picomatch: 2.3.1
     dev: true
+
+  /recordrtc@5.6.2:
+    resolution: {integrity: sha512-1QNKKNtl7+KcwD1lyOgP3ZlbiJ1d0HtXnypUy7yq49xEERxk31PHvE9RCciDrulPCY7WJ+oz0R9hpNxgsIurGQ==}
+    dev: false
 
   /reflect.getprototypeof@1.0.6:
     resolution: {integrity: sha512-fmfw4XgoDke3kdI6h4xcUz1dG8uaiv5q9gcEwLS4Pnth2kxT+GZ7YehS1JTMGBQmtV7Y4GFGbs2re2NqhdozUg==}
