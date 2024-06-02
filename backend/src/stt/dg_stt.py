@@ -3,10 +3,10 @@ from typing import List
 from deepgram import (DeepgramClient, DeepgramClientOptions, LiveOptions,
                       LiveTranscriptionEvents)
 
-from .transcription import Transcription
+from .stt import STT
 
 
-class DeepGramTranscription(Transcription):
+class DGSTT(STT):
 
     def __init__(self):
 

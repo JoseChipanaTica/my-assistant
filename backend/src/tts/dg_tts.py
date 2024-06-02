@@ -6,7 +6,7 @@ import requests
 from .tts import TTS
 
 
-class DeepGramTTS(TTS):
+class DGTTS(TTS):
 
     def __init__(self):
         self.client = None

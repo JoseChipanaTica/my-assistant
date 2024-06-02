@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class Transcription(ABC):
+class STT(ABC):
     @abstractmethod
     def set_callback(self, callback):
         pass

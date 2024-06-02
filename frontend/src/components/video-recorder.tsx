@@ -6,8 +6,7 @@ export const VideoRecorder: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false)
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const videoRef: MutableRefObject<HTMLVideoElement | null> = useRef(null)
-  const [audioSocket, setAudioSocket] = useState<WebSocket | null>(null)
-  const [videoSocket, setVideoSocket] = useState<WebSocket | null>(null)
+  const [socket, setSocket] = useState<WebSocket | null>(null)
   const audioContextRef: MutableRefObject<AudioContext | null> = useRef(null)
   const videoCanvasRef: MutableRefObject<HTMLCanvasElement | null> = useRef(null)
   const [audioQueue, setAudioQueue] = useState<any[]>([])
@@ -16,14 +15,58 @@ export const VideoRecorder: React.FC = () => {
     setAudioQueue(prevQueue => [...prevQueue, audioBytes])
   }
 
-  const startRecording = (stream: MediaStream) => {
-    const audioStream = new MediaStream(stream.getAudioTracks())
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (reader.result) {
+          const base64data = reader.result.toString().split(',')[1] // Extract Base64 part
+          resolve(base64data)
+        } else {
+          reject('Error converting Blob to Base64')
+        }
+      }
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  const getMedia = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
+
+      setMediaStream(stream)
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch (err) {
+      console.error('Error accessing media devices.', err)
+    }
+  }
+
+  const recording = async () => {
+    if (!mediaStream) {
+      await getMedia()
+    }
+    setIsRecording(true)
+    startRecording()
+    startVideoCapture()
+  }
+
+  const startRecording = () => {
+    if (!mediaStream) {
+      return
+    }
+    const audioStream = new MediaStream(mediaStream.getAudioTracks())
     const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' })
-    recorder.ondataavailable = (event: BlobEvent) => {
+    recorder.ondataavailable = async (event: BlobEvent) => {
       if (event.data.size > 0) {
-        if (audioSocket && audioSocket.readyState === WebSocket.OPEN) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
           const audioBlob = new Blob([event.data], { type: 'audio/wav' })
-          audioSocket.send(audioBlob)
+          const audioString = await blobToBase64(audioBlob)
+          const data = JSON.stringify({ type: 'audio', audio: audioString })
+          socket.send(data)
         }
       }
     }
@@ -31,7 +74,6 @@ export const VideoRecorder: React.FC = () => {
     recorder.onstop = () => {}
 
     recorder.start(1000 * 1)
-    setIsRecording(true)
   }
 
   const startVideoCapture = () => {
@@ -47,10 +89,12 @@ export const VideoRecorder: React.FC = () => {
           videoCanvasRef.current.width = videoRef.current.videoWidth
           videoCanvasRef.current.height = videoRef.current.videoHeight
           context.drawImage(videoRef.current, 0, 0, videoCanvasRef.current.width, videoCanvasRef.current.height)
-          videoCanvasRef.current.toBlob(blob => {
+          videoCanvasRef.current.toBlob(async blob => {
             if (blob) {
-              if (videoSocket && videoSocket.readyState === WebSocket.OPEN) {
-                videoSocket.send(blob)
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                const frameString = await blobToBase64(blob)
+                const data = JSON.stringify({ type: 'frame', frame: frameString })
+                socket.send(data)
               }
             }
           }, 'image/jpeg')
@@ -60,14 +104,19 @@ export const VideoRecorder: React.FC = () => {
     }
 
     captureFrame()
-    setIsRecording(true)
   }
 
   const stopRecording = () => {
+    setIsRecording(false)
+
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop())
+      setMediaStream(null)
     }
-    setIsRecording(false)
+
+    if (socket) {
+      socket.close()
+    }
   }
 
   const playNextAudio = async () => {
@@ -105,22 +154,8 @@ export const VideoRecorder: React.FC = () => {
   }, [audioQueue])
 
   useEffect(() => {
-    const getMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
-
-        setMediaStream(stream)
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-      } catch (err) {
-        console.error('Error accessing media devices.', err)
-      }
-    }
-
-    const initAudioWebSocket = () => {
-      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVICE}/ws/audio`)
+    const initSocket = () => {
+      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVICE}/ws/13`)
       ws.onopen = () => {
         console.log('WebSocket connection established')
       }
@@ -137,36 +172,16 @@ export const VideoRecorder: React.FC = () => {
       ws.onclose = () => {
         console.log('WebSocket connection closed')
       }
-      setAudioSocket(ws)
-    }
-
-    const initVideoWebSocket = () => {
-      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVICE}/ws/video`)
-      ws.onopen = () => {
-        console.log('WebSocket connection established')
-      }
-      ws.onerror = error => {
-        console.error('WebSocket error:', error)
-      }
-      ws.onclose = () => {
-        console.log('WebSocket connection closed')
-      }
-      setVideoSocket(ws)
+      setSocket(ws)
     }
 
     getMedia()
-    initAudioWebSocket()
-    // initVideoWebSocket()
+    initSocket()
 
     return () => {
-      if (audioSocket) {
-        audioSocket.close()
+      if (socket) {
+        socket.close()
       }
-
-      if (videoSocket) {
-        videoSocket.close()
-      }
-
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop())
       }
@@ -183,14 +198,7 @@ export const VideoRecorder: React.FC = () => {
               Stop Recording
             </button>
           ) : (
-            <button
-              className="bg-blue-600 rounded-3xl p-4"
-              onClick={() => {
-                if (mediaStream) {
-                  startRecording(mediaStream), startVideoCapture()
-                }
-              }}
-            >
+            <button className="bg-blue-600 rounded-3xl p-4" onClick={recording}>
               Start Recording
             </button>
           )}
